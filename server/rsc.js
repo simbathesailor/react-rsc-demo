@@ -1,5 +1,7 @@
 import { createServer } from "http";
 import { readFile, readdir } from "fs/promises";
+import ReactMarkdown from "react-markdown";
+import a11yEmoji from "@fec/remark-a11y-emoji";
 import sanitizeFilename from "sanitize-filename";
 
 // This is a server to host data-local resources like databases and RSC.
@@ -58,7 +60,7 @@ async function Post({ slug }) {
       <h2>
         <a href={"/" + slug}>{slug}</a>
       </h2>
-      <article>{content}</article>
+      <ReactMarkdown remarkPlugins={[a11yEmoji]}>{content}</ReactMarkdown>
     </section>
   );
 }
@@ -83,6 +85,9 @@ function BlogLayout({ children }) {
   const author = "Jae Doe";
   return (
     <html>
+      <head>
+        <meta charset="UTF-8" />
+      </head>
       <body
         style={{ background: getRandomColor(), transition: "background 2s" }}
       >
