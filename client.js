@@ -41,6 +41,11 @@ function parseJSX(key, value) {
 window.addEventListener(
   "click",
   (e) => {
+    console.log("e -->", e);
+    if (e.target.tagName === "BUTTON" && e.target.type === "submit") {
+      handleCommentSubmit(e);
+      return;
+    }
     if (e.target.tagName !== "A") {
       return;
     }
@@ -61,3 +66,41 @@ window.addEventListener(
 window.addEventListener("popstate", () => {
   navigate(window.location.pathname);
 });
+
+async function handleCommentSubmit(event) {
+  event.preventDefault();
+  const comment = document.getElementById("comment").value;
+
+  if (!comment) return;
+  // Create an object with the form data
+
+  const currentURL = new URL(window.location.href);
+  const slug = currentURL.pathname.substring(1);
+  const formData = {
+    comment: comment,
+    slug,
+  };
+
+  console.log("formData", formData);
+
+  try {
+    const response = await fetch(`/update_comment?jsx`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(formData),
+    });
+
+    const clientJSXString = await response.text();
+    const clientJSX = JSON.parse(clientJSXString, parseJSX); // Notice the second argument
+    //
+    // console.log("clientJSX -->", clientJSX);
+    // return clientJSX;
+    // if (pathname === currentPathname) {
+    root.render(clientJSX);
+    // }
+  } catch (error) {
+    console.error("Error updating comment:", error);
+  }
+}

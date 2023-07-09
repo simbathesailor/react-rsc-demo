@@ -1,5 +1,5 @@
 import { createServer } from "http";
-import { readFile, readdir } from "fs/promises";
+import { readFile, readdir, writeFile } from "fs/promises";
 import ReactMarkdown from "react-markdown";
 import a11yEmoji from "@fec/remark-a11y-emoji";
 import sanitizeFilename from "sanitize-filename";
@@ -7,16 +7,68 @@ import sanitizeFilename from "sanitize-filename";
 // This is a server to host data-local resources like databases and RSC.
 
 createServer(async (req, res) => {
+  // console.log("req --> 1 ->", req);
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    await sendJSX(res, <Router url={url} />);
+    console.log("url.pathname  1 -->", url.pathname, req.method);
+
+    if (req.method === "POST" && url.pathname === "/update_comment") {
+      let data = "";
+
+      req.on("data", (chunk) => {
+        data += chunk;
+      });
+
+      req.on("end", async () => {
+        try {
+          const commentData = JSON.parse(data);
+          const { comment, slug } = commentData;
+
+          // console.log("path to read from ", `./data/${slug}-comments.json`);
+          // Read the file
+          const fileData = await readFile(
+            `./data/${slug}-comments.json`,
+            "utf8"
+          );
+
+          const jsonData = JSON.parse(fileData);
+
+          // Update the comments array with the new comment
+          jsonData.comments.push({
+            comment: comment,
+            time: new Date().toLocaleString(),
+          });
+
+          // console.log("jsonData -->", jsonData);
+          // Save the updated data back to the file
+          await writeFile(
+            `./data/${slug}-comments.json`,
+            JSON.stringify(jsonData, null, 2),
+            "utf8"
+          );
+          console.log("Updated comment:", comment);
+          await sendJSX(res, <RenderPostPage slug={slug} />);
+        } catch (err) {
+          res.statusCode = 400; // Bad Request
+          res.end();
+        }
+      });
+    } else {
+      await sendJSX(res, <Router url={url} />);
+    }
   } catch (err) {
     res.statusCode = err.statusCode ?? 500;
     res.end();
   }
 }).listen(8081);
 
+async function RenderPostPage({ slug }) {
+  const page = <BlogPostPage postSlug={slug} />;
+  return <BlogLayout>{page}</BlogLayout>;
+}
+
 function Router({ url }) {
+  // console.log("hello -->", url);
   let page;
   if (url.pathname === "/") {
     page = <BlogIndexPage />;
@@ -45,7 +97,79 @@ async function BlogIndexPage() {
 }
 
 function BlogPostPage({ postSlug }) {
-  return <Post slug={postSlug} />;
+  return (
+    <>
+      <Post slug={postSlug} />
+      <section>
+        <form
+          id="commentform"
+          style={{ display: "flex", flexDirection: "column", width: "50%" }}
+          // onSubmit={onSubmitForm}
+        >
+          <label htmlFor="comment">Comment:</label>
+          <textarea
+            id="comment"
+            style={{ marginTop: "10px" }}
+            name="comment"
+            rows="4"
+            required
+          ></textarea>
+
+          <button
+            style={{
+              display: "inline-block",
+              width: "100px",
+              marginTop: "10px",
+              height: "30px",
+              borderRadius: "10px",
+              outline: "none",
+              cursor: "pointer",
+            }}
+            type="submit"
+          >
+            Submit
+          </button>
+        </form>
+      </section>
+      <Comments slug={postSlug} />
+    </>
+  );
+}
+
+async function Comments({ slug }) {
+  let commentsData = {};
+  try {
+    const commentsContent = await readFile(
+      "./data/" + `${slug}-comments` + ".json",
+      "utf8"
+    );
+    commentsData = JSON.parse(commentsContent);
+  } catch (err) {
+    commentsData = {
+      comments: [],
+    };
+  }
+  return (
+    <section style={{ padding: "10px" }}>
+      {commentsData.comments.map((item) => (
+        <Comment item={item} key={item.time} />
+      ))}
+    </section>
+  );
+}
+async function Comment({ item }) {
+  return (
+    <div
+      style={{
+        marginBottom: "20px",
+        borderBottom: "1px solid",
+        paddingBottom: "10px",
+      }}
+    >
+      <div style={{ fontSize: "20px" }}> {item.comment}</div>
+      <div style={{ fontSize: "14px" }}> {item.time} </div>
+    </div>
+  );
 }
 
 async function Post({ slug }) {
@@ -56,12 +180,14 @@ async function Post({ slug }) {
     throwNotFound(err);
   }
   return (
-    <section>
-      <h2>
-        <a href={"/" + slug}>{slug}</a>
-      </h2>
-      <ReactMarkdown remarkPlugins={[a11yEmoji]}>{content}</ReactMarkdown>
-    </section>
+    <>
+      <section>
+        <h2>
+          <a href={"/" + slug}>{slug}</a>
+        </h2>
+        <ReactMarkdown remarkPlugins={[a11yEmoji]}>{content}</ReactMarkdown>
+      </section>
+    </>
   );
 }
 
@@ -81,16 +207,15 @@ function getRandomColor() {
   return finalHexColor;
 }
 
+// style={{ background: getRandomColor(), transition: "background 2s" }}
 function BlogLayout({ children }) {
   const author = "Jae Doe";
   return (
     <html>
       <head>
-        <meta charset="UTF-8" />
+        <meta charSet="UTF-8" />
       </head>
-      <body
-        style={{ background: getRandomColor(), transition: "background 2s" }}
-      >
+      <body>
         <nav>
           <a href="/">Home</a>
           <hr />
@@ -140,6 +265,7 @@ function FragmentExample2() {
 async function sendJSX(res, jsx) {
   const clientJSX = await renderJSXToClientJSX(jsx);
   const clientJSXString = JSON.stringify(clientJSX, stringifyJSX);
+  // console.log("clientJSXString -->", clientJSXString);
   res.setHeader("Content-Type", "application/json");
   res.end(clientJSXString);
 }
@@ -171,7 +297,7 @@ async function renderJSXToClientJSX(jsx) {
   } else if (Array.isArray(jsx)) {
     return Promise.all(jsx.map((child) => renderJSXToClientJSX(child)));
   } else if (jsx != null && typeof jsx === "object") {
-    console.log("jsx -->", jsx);
+    // console.log("jsx -->", jsx);
     if (jsx.$$typeof === Symbol.for("react.element")) {
       if (typeof jsx.type === "string") {
         return {
@@ -197,8 +323,10 @@ async function renderJSXToClientJSX(jsx) {
         )
       );
     }
+  } else if (jsx != null && typeof jsx === "function") {
+    return null;
   } else {
-    console.log("In the not implement block", jsx);
+    console.log("In the not implement block", jsx, typeof jsx);
     throw new Error("Not implemented");
   }
 }
