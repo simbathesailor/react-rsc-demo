@@ -9,14 +9,12 @@ createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     await sendJSX(res, <Router url={url} />);
   } catch (err) {
-    console.error(err);
     res.statusCode = err.statusCode ?? 500;
     res.end();
   }
 }).listen(8081);
 
 function Router({ url }) {
-  console.log("url -->", url);
   let page;
   if (url.pathname === "/") {
     page = <BlogIndexPage />;
@@ -51,7 +49,6 @@ function BlogPostPage({ postSlug }) {
 async function Post({ slug }) {
   let content;
   try {
-    console.log("slug-->", "./posts/" + slug + ".txt");
     content = await readFile("./posts/" + slug + ".txt", "utf8");
   } catch (err) {
     throwNotFound(err);
@@ -111,19 +108,29 @@ function Footer({ author }) {
           (c) {author} {new Date().getFullYear()}
         </i>
       </p>
-      {/* <FragmentExample /> */}
+      <FragmentExample1 />
     </footer>
   );
 }
 
-// function FragmentExample() {
-//   return (
-//     <>
-//       <div>Fragement layer 1</div>
-//       Fragment Layer 2
-//     </>
-//   );
-// }
+function FragmentExample1() {
+  return (
+    <>
+      <div>FragmentExample1 Layer 1</div>
+      FragmentExample1 Layer 2
+      <FragmentExample2 />
+    </>
+  );
+}
+
+function FragmentExample2() {
+  return (
+    <>
+      <div>FragmentExample2 Layer 1</div>
+      FragmentExample2 Layer 2
+    </>
+  );
+}
 
 async function sendJSX(res, jsx) {
   const clientJSX = await renderJSXToClientJSX(jsx);
@@ -159,7 +166,7 @@ async function renderJSXToClientJSX(jsx) {
   } else if (Array.isArray(jsx)) {
     return Promise.all(jsx.map((child) => renderJSXToClientJSX(child)));
   } else if (jsx != null && typeof jsx === "object") {
-    // console.log("jsx -->", jsx);
+    console.log("jsx -->", jsx);
     if (jsx.$$typeof === Symbol.for("react.element")) {
       if (typeof jsx.type === "string") {
         return {
@@ -171,6 +178,9 @@ async function renderJSXToClientJSX(jsx) {
         const props = jsx.props;
         const returnedJsx = await Component(props);
         return renderJSXToClientJSX(returnedJsx);
+      } else if (jsx.type === Symbol.for("react.fragment")) {
+        // Handle fragments
+        return renderJSXToClientJSX(jsx.props.children || []);
       } else throw new Error("Not implemented.");
     } else {
       return Object.fromEntries(
@@ -182,5 +192,8 @@ async function renderJSXToClientJSX(jsx) {
         )
       );
     }
-  } else throw new Error("Not implemented");
+  } else {
+    console.log("In the not implement block", jsx);
+    throw new Error("Not implemented");
+  }
 }
